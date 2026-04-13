@@ -32,6 +32,10 @@ sharingan/checkpoints/
 sharingan/weights/
 pretrained/
 
+# TelME: exclude IEMOCAP (not used) and bundled dataset directories
+TelME/IEMOCAP/
+TelME/dataset/
+
 # Data
 data/MELD.Raw/
 data/processed/
