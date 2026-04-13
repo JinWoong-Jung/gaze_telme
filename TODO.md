@@ -33,8 +33,9 @@ gaze_erc/
 │   ├── sample_frames.py     # FPS 리샘플 + 최대 프레임 제한
 │   └── detect_faces.py      # RetinaFace + DeepSORT 트래킹
 ├── gaze/
-│   ├── sharingan_infer.py   # frame → gaze_map/gaze_point/inout
-│   └── sharingan_ckpt/      # 사전학습 가중치
+│   └── sharingan_infer.py   # frame → gaze_map/gaze_point/inout
+├── sharingan/               # Sharingan upstream repo
+├── sharingan_ckpt/          # Sharingan 사전학습 가중치
 ├── features/
 │   ├── gaze/{train,dev,test}.pkl   # utterance-level gaze_vec ∈ R^6
 │   └── cache/                       # 프레임 단위 raw 출력 (.npz)
@@ -87,8 +88,8 @@ gaze_erc/
   ```
 - [O] **Sharingan 저장소 clone & 가중치 다운로드**
   ```bash
-  git clone <sharingan-repo> gaze/sharingan
-  # 사전학습 ckpt → gaze/sharingan_ckpt/
+  git clone <sharingan-repo> sharingan
+  # 사전학습 ckpt → sharingan_ckpt/
   ```
 - [O] **MELD 원본 압축 해제**
   ```bash
@@ -157,7 +158,7 @@ MELD 발화 영상의 프레임 단위 gaze raw 출력을 캐시한다.
 - [ ] **Edge case**: 얼굴 0개 프레임 → `bbox=None`, gaze 단계에서 처리
 
 #### 2.4 Gaze inference (`gaze/sharingan_infer.py`)
-- [ ] Sharingan 모델 로드 (`gaze/sharingan_ckpt/`)
+- [ ] Sharingan 모델 로드 (`sharingan_ckpt/`)
 - [ ] head bbox 필요 → 2.3 결과 재사용
 - [ ] 배치 추론 (batch_size=16 권장)
   ```python
