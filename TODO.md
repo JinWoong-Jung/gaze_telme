@@ -58,7 +58,10 @@ gaze_erc/
 │   ├── seed.py
 │   ├── metrics.py           # Acc / Weighted-F1 / Macro-F1
 │   └── logger.py            # wandb or tensorboard wrapper
-├── erc/                     # 분석/시각화 노트북 및 스크립트
+├── erc/                     # TelME + Sharingan 통합 구현 공간
+│   ├── common/              # seed, metrics 등 공용 유틸
+│   ├── tools/               # 환경 점검, 로컬 툴링
+│   └── telme_sharingan/     # 통합용 데이터/모델/학습 코드
 ├── requirements.txt
 ├── environment.yml
 └── TODO.md
@@ -96,7 +99,7 @@ gaze_erc/
   mkdir -p data/MELD.Raw && tar -xzf data/MELD.Raw.tar.gz -C data/MELD.Raw
   ```
 - [O] `.gitignore`에 `data/MELD.Raw/`, `data/processed/`, `features/cache/`, `TelME/`, `*.bin`, `*.pkl`, `wandb/` 추가
-- [O] `utils/seed.py`로 seed 고정 (torch, numpy, random, `CUBLAS_WORKSPACE_CONFIG`)
+- [O] `erc/common/seed.py`로 seed 고정 (torch, numpy, random, `CUBLAS_WORKSPACE_CONFIG`)
 - [O] **Sanity check 스크립트**: `python -c "import torch; print(torch.cuda.is_available(), torch.__version__)"`
 
 ### 완료 기준

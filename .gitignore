@@ -28,10 +28,11 @@ wandb/
 *.ckpt
 
 # External repositories and checkpoints
-gaze/sharingan/checkpoints
+sharingan/checkpoints/
+sharingan/weights/
+pretrained/
 
 # Data
 data/MELD.Raw/
 data/processed/
 features/cache/
-
