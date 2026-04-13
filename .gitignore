@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Experiment artifacts
+wandb/
+*.bin
+*.pkl
+*.pt
+*.ckpt
+
+# External repositories and checkpoints
+gaze/sharingan/checkpoints
+
+# Data
+data/MELD.Raw/
+data/processed/
+features/cache/
+
