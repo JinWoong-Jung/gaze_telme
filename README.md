@@ -14,7 +14,7 @@
     <a>슈멍<sub>1</sub></a>
   </p>
   <p align="center">
-    <i>Sungkyunkwan University · <sub>1</sub> AAI, <sub>2</sub> DSC and <sub>3</sub> CNT Departments</i><br>
+    <i>Sungkyunkwan University · AAI<sub>1</sub>, DSC<sub>2</sub> and CNT<sub>3</sub> Departments</i><br>
     <i>2026-1 SKK:AI - Social AI session</i>
   </p>
 </p>
