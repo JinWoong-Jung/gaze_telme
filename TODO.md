@@ -1,446 +1,418 @@
-# 📘 Gaze-aware MERC with TelME — Project TODO
+# Gaze-aware MERC — 프로젝트 TODO
 
-## 🎯 Objective
-Sharingan 기반 **pseudo-gaze 신호**를 TelME 구조에 주입하여 MELD 데이터셋의
-Multimodal Emotion Recognition in Conversation (MERC) 성능을 개선한다.
+---
 
-## 🧠 Final Architecture
+## 1. 프로젝트 개요
+
+### 한 줄 요약
+**MELD 감정 인식 대화(MERC) 태스크에서, Sharingan이 생성한 pseudo-gaze 신호를 TelME 멀티모달 증류 구조에 주입하여 성능을 개선한다.**
+
+### 아키텍처
 ```
-Text  (Teacher: RoBERTa-large)
-Audio (Student: Data2Vec)
-Video (Student: TimeSformer) ─┐
-Gaze  (Sharingan pseudo-feat) ─┴─► Video–Gaze Fusion (student-level)
-                                   └─► Teacher-leading ASF Fusion
-                                       └─► Emotion Prediction (7-class)
+텍스트  → RoBERTa-large  (Teacher, 고정)
+오디오  → Data2Vec       (Audio Student)
+비디오  → TimeSformer    (Video Student)
+Gaze   → Sharingan      (pseudo-gaze → R^6 피처)
+              │
+              ▼
+      GazeProjector (R^6 → R^768)
+              │
+      Video + Gaze Fusion  ← [add | concat_proj | gated] 중 선택
+              │
+      ASF (Attentive Score Fusion)  ← Teacher-leading
+              │
+      7-class 감정 분류 (anger / disgust / fear / joy / neutral / sadness / surprise)
 ```
 
-## 📂 Repository Layout (목표 구조)
+### 데이터셋
+- **MELD** (Multimodal EmotionLines Dataset): Friends TV 드라마 기반 대화 감정 데이터
+- 분할: train ≈ 9,989 / dev ≈ 1,109 / test ≈ 2,610 발화
+
+### 핵심 연구 질문
+| # | 질문 |
+|---|------|
+| Q1 | Gaze 신호가 Weighted-F1을 유의하게 향상시키는가? (p < 0.05) |
+| Q2 | 어떤 감정 클래스가 Gaze로 가장 이득을 보는가? |
+| Q3 | Random/Zero gaze 대비 실제 gaze가 유의미한 차이를 보이는가? |
+
+---
+
+## 2. 현재 구현 완료 항목 (코드 준비 완료, 실행은 GPU 필요)
+
+### 프로젝트 구조
 ```
 gaze_erc/
-├── configs/                 # yaml 기반 실험 설정 (hydra or OmegaConf)
-│   ├── base.yaml
+├── configs/               # 실험 설정 YAML
+│   ├── base.yaml          # 공통 하이퍼파라미터
 │   ├── phase1_baseline.yaml
 │   ├── phase5_video_gaze.yaml
 │   └── phase7_fusion.yaml
-├── data/
-│   ├── MELD.Raw.tar.gz      # (존재) 원본 배포 아카이브
-│   ├── MELD.Raw/            # tar 해제 결과 (train/dev/test .mp4 + .csv)
-│   └── processed/
-│       ├── clips/{train,dev,test}/dia{D}_utt{U}.mp4
-│       └── frames/{train,dev,test}/dia{D}_utt{U}/frame_{i:03d}.jpg
-├── preprocess/
-│   ├── extract_clips.py     # csv 기반 utterance 단위 슬라이싱
-│   ├── sample_frames.py     # FPS 리샘플 + 최대 프레임 제한
-│   └── detect_faces.py      # RetinaFace + DeepSORT 트래킹
-├── gaze/
-│   └── sharingan_infer.py   # frame → gaze_map/gaze_point/inout
-├── sharingan/               # Sharingan upstream repo
-├── sharingan_ckpt/          # Sharingan 사전학습 가중치
-├── features/
-│   ├── gaze/{train,dev,test}.pkl   # utterance-level gaze_vec ∈ R^6
-│   └── cache/                       # 프레임 단위 raw 출력 (.npz)
-├── models/
-│   ├── gaze_projector.py
-│   ├── video_gaze_student.py
-│   └── checkpoints/
-│       ├── teacher.bin
-│       ├── student_audio.bin
-│       ├── student_video.bin
-│       ├── student_video_gaze.bin
-│       └── total_fusion.bin
-├── TelME/                   # clone 대상 (.gitignore에 포함)
-├── scripts/
-│   ├── run_phase1_baseline.sh
-│   ├── run_phase2_gaze.sh
-│   ├── run_phase5_train.sh
-│   └── run_eval.sh
-├── utils/
-│   ├── seed.py
-│   ├── metrics.py           # Acc / Weighted-F1 / Macro-F1
-│   └── logger.py            # wandb or tensorboard wrapper
-├── erc/                     # TelME + Sharingan 통합 구현 공간
-│   ├── common/              # seed, metrics 등 공용 유틸
-│   ├── tools/               # 환경 점검, 로컬 툴링
-│   └── telme_sharingan/     # 통합용 데이터/모델/학습 코드
-├── requirements.txt
-├── environment.yml
-└── TODO.md
+├── pipeline/              # 데이터 처리 파이프라인
+│   ├── extract_clips.py   # 발화 클립 정리
+│   ├── sample_frames.py   # 프레임 샘플링 (FPS=6, max=32)
+│   ├── detect_faces.py    # RetinaFace + DeepSORT 얼굴 검출·트래킹
+│   ├── gaze_infer.py      # Sharingan gaze 추론
+│   └── build_features.py  # R^6 gaze_vec 생성 + z-score 정규화
+├── models/                # 모델 정의
+│   ├── gaze_projector.py  # R^6 → R^768 MLP
+│   └── video_gaze_student.py  # 3가지 fusion 방식 포함
+├── train/                 # 학습 스크립트
+│   ├── train_student_gaze.py  # Phase 6: VideoGazeStudent KD 학습
+│   └── train_fusion.py        # Phase 7: ASF 융합 학습 (3-seed)
+├── eval/                  # 평가 스크립트
+│   └── eval_all.py        # A/B/C/D 조건 전체 평가
+├── analysis/              # 분석 & 시각화
+│   ├── eda_gaze.ipynb     # 피처 분포 탐색
+│   ├── quant.ipynb        # 정량 분석 (confusion matrix, F1 delta)
+│   ├── qual.ipynb         # 정성 분석 (오분류 샘플 20개)
+│   ├── viz_gaze_overlay.py    # 프레임 위 gaze 오버레이
+│   ├── viz_feature_dist.py    # 감정별 피처 분포
+│   └── viz_compare.py     # Baseline vs Ours 비교 차트
+├── utils/                 # 공용 유틸리티
+│   ├── seed.py            # 재현성 시드 고정
+│   ├── metrics.py         # Acc / Weighted-F1 / Macro-F1 / t-test
+│   └── logger.py          # W&B + JSONL 로깅 래퍼
+├── tests/                 # 단위 테스트
+│   ├── test_dataloader.py
+│   └── test_video_gaze_student.py
+└── scripts/               # 셸 실행 진입점
+    ├── check_env.py
+    ├── run_phase1.sh
+    ├── run_phase2.sh
+    ├── run_phase5.sh
+    └── run_eval.sh
+```
+
+### TelME 수정 사항 (완료)
+| 파일 | 변경 내용 |
+|------|----------|
+| `TelME/MELD/preprocessing.py` | 데이터 경로를 `data/MELD.Raw/`로 패치 |
+| `TelME/MELD/dataset.py` | `gaze_pkl` 인자 추가 — 각 발화에 gaze_vec 첨부 |
+| `TelME/MELD/utils.py` | `make_batchs`가 gaze 포함 시 6-tuple 반환 (하위 호환 유지) |
+
+---
+
+## 3. 앞으로 해야 할 작업 (GPU 서버 기준 순서)
+
+> **전제조건**: GPU 서버에서 `conda activate gaze_telme` 후 프로젝트 루트에서 실행
+
+---
+
+### Step 0 — 환경 확인 (5분)
+
+**무엇을 하는가**
+GPU, ffmpeg, 주요 라이브러리가 정상적으로 설치되었는지 점검한다.
+
+**어떻게 하는가**
+```bash
+python scripts/check_env.py
+```
+
+**완료 기준**
+```
+[OK] torch: torch=2.1.0, cuda=True, mps=False
+[OK] ffmpeg: ffmpeg version ...
+[OK] transformers: ...
+→ Environment sanity check passed.
 ```
 
 ---
 
-## 📌 Phase 0. Environment Setup - Finished
+### Step 1 — TelME Baseline 학습 (약 6–12 시간)
 
-### TODO
-- [O] **conda 환경 생성 & 고정**
-  ```bash
-  conda create -n gaze_telme python=3.9 -y
-  conda activate gaze_telme
-  # GPU: macOS에서는 MPS, 학습 서버에서는 CUDA 11.8 가정
-  pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 \
-      --index-url https://download.pytorch.org/whl/cu118
-  pip install transformers==4.36.2 torch-geometric==2.4.0 \
-      scikit-learn pandas numpy tqdm einops opencv-python \
-      decord ffmpeg-python omegaconf wandb
-  pip install facenet-pytorch retina-face deep-sort-realtime
-  ```
-- [O] `requirements.txt`, `environment.yml` 커밋으로 버전 고정
-- [O] **TelME clone**
-  ```bash
-  git clone https://github.com/yuntaeyang/TelME.git TelME
-  ```
-- [O] **Sharingan 저장소 clone & 가중치 다운로드**
-  ```bash
-  git clone <sharingan-repo> sharingan
-  # 사전학습 ckpt → sharingan_ckpt/
-  ```
-- [O] **MELD 원본 압축 해제**
-  ```bash
-  mkdir -p data/MELD.Raw && tar -xzf data/MELD.Raw.tar.gz -C data/MELD.Raw
-  ```
-- [O] `.gitignore`에 `data/MELD.Raw/`, `data/processed/`, `features/cache/`, `TelME/`, `*.bin`, `*.pkl`, `wandb/` 추가
-- [O] `erc/common/seed.py`로 seed 고정 (torch, numpy, random, `CUBLAS_WORKSPACE_CONFIG`)
-- [O] **Sanity check 스크립트**: `python -c "import torch; print(torch.cuda.is_available(), torch.__version__)"`
+**무엇을 하는가**
+비교 기준(Baseline)이 될 TelME 원본 모델을 학습한다.
+Teacher(RoBERTa) → Student(Audio + Video) → ASF Fusion 순으로 3단계 학습.
+이 결과가 논문 재현 수치와 일치해야 이후 실험의 신뢰도가 담보된다.
 
-### 완료 기준
-- `conda activate gaze_telme` 후 `python scripts/check_env.py`가 torch/GPU/ffmpeg/decord 모두 OK 출력
+**어떻게 하는가**
+```bash
+bash scripts/run_phase1.sh
+```
+학습 완료 후 생성 파일:
+```
+models/checkpoints/teacher.bin
+models/checkpoints/student_audio/total_student.bin
+models/checkpoints/student_video/total_student.bin
+models/checkpoints/total_fusion.bin
+results/baseline.json
+```
+
+**완료 기준**
+- `results/baseline.json`에 Weighted-F1이 논문 수치(≈ 0.65)와 ±0.5%p 이내
+- 불일치 시 seed/epoch 조정 후 재시도
 
 ---
 
-## 📌 Phase 1. TelME Baseline Reproduction
+### Step 2 — 데이터 전처리 파이프라인 실행 (약 2–4 시간)
 
-### TODO
-- [O] TelME 원본 MELD 데이터 경로를 `data/MELD.Raw`에 맞게 수정
-  - `TelME/MELD/preprocessing.py`의 하드코딩 경로 확인 및 patch
-- [ ] 각 단계 실행 및 로그 저장 (`logs/phase1/*.log`)
-  ```bash
-  python TelME/MELD/teacher.py  2>&1 | tee logs/phase1/teacher.log
-  python TelME/MELD/student.py  2>&1 | tee logs/phase1/student.log
-  python TelME/MELD/fusion.py   2>&1 | tee logs/phase1/fusion.log
-  ```
-- [ ] 체크포인트 존재 검증
-  - [ ] `teacher.bin`
-  - [ ] `student_audio/total_student.bin`
-  - [ ] `student_video/total_student.bin`
-  - [ ] `total_fusion.bin`
-- [ ] baseline metric 기록 (`results/baseline.json`)
-  - [ ] Accuracy
-  - [ ] Weighted-F1 (보고 기준)
-  - [ ] Macro-F1
-- [ ] 논문 수치와 ±0.5%p 이내 일치 확인 → 불일치 시 seed/epoch 재시도
+**무엇을 하는가**
+MELD 비디오에서 Sharingan이 처리할 수 있는 형태의 입력을 생성한다.
+4단계 파이프라인: 클립 정리 → 프레임 샘플링 → 얼굴 검출 → gaze 추론.
 
-### 완료 기준
-- `results/baseline.json`에 세 지표가 기록되고 README에 표 형태로 정리
+| 단계 | 스크립트 | 출력 |
+|------|----------|------|
+| 2.1 클립 정리 | `pipeline/extract_clips.py` | `data/processed/clips/` |
+| 2.2 프레임 샘플링 | `pipeline/sample_frames.py` | `data/processed/frames/` (FPS=6, max=32장) |
+| 2.3 얼굴 검출 | `pipeline/detect_faces.py` | `features/cache/faces/*.npz` |
+| 2.4 Gaze 추론 | `pipeline/gaze_infer.py` | `features/cache/gaze/*.npz` |
 
----
+**어떻게 하는가**
+```bash
+bash scripts/run_phase2.sh all    # train / dev / test 모두 처리
+# 또는 분할별로:
+bash scripts/run_phase2.sh train
+bash scripts/run_phase2.sh dev
+bash scripts/run_phase2.sh test
+```
 
-## 📌 Phase 2. MELD Video → Gaze Pipeline
+**완료 기준**
+- `features/cache/gaze/train/`, `dev/`, `test/` 아래 `.npz` 파일 생성률 ≥ 98%
+- `features/cache/gaze/missing.txt` 존재 시 누락 발화 확인
 
-### 🎯 Goal
-MELD 발화 영상의 프레임 단위 gaze raw 출력을 캐시한다.
-
-### TODO
-
-#### 2.1 Utterance clip 추출 (`preprocess/extract_clips.py`)
-- [ ] `train_sent_emo.csv` / `dev_sent_emo.csv` / `test_sent_emo.csv` 파싱
-- [ ] `StartTime`, `EndTime` (HH:MM:SS,mmm) → seconds 변환
-- [ ] `ffmpeg -ss {start} -to {end} -i {src.mp4} -c copy {dst.mp4}` 로 슬라이싱
-- [ ] 실패 케이스(파일 없음/길이 0) → `data/processed/missing_clips.csv`
-- [ ] 예상 산출: ≈13,708 clips (train) + dev + test
-
-#### 2.2 Frame sampling (`preprocess/sample_frames.py`)
-- [ ] **FPS = 6**, **max_frames = 32** (균등 샘플링)
-- [ ] decord 사용 (opencv보다 빠름)
-- [ ] 출력: `frames/{split}/dia{D}_utt{U}/frame_{i:03d}.jpg`
-- [ ] 멀티프로세싱 (`multiprocessing.Pool`, num_workers=8)
-
-#### 2.3 Face detection & tracking (`preprocess/detect_faces.py`)
-- [ ] **Detector**: RetinaFace (facenet-pytorch) — threshold 0.9
-- [ ] **Tracker**: deep-sort-realtime, max_age=10
-- [ ] 프레임별 `bbox, track_id, conf` 저장 → `features/cache/faces/{split}/dia{D}_utt{U}.npz`
-- [ ] **Edge case**: 얼굴 0개 프레임 → `bbox=None`, gaze 단계에서 처리
-
-#### 2.4 Gaze inference (`gaze/sharingan_infer.py`)
-- [ ] Sharingan 모델 로드 (`sharingan_ckpt/`)
-- [ ] head bbox 필요 → 2.3 결과 재사용
-- [ ] 배치 추론 (batch_size=16 권장)
-  ```python
-  gaze_map, gaze_point, inout = model(frame, head_bbox)
-  ```
-- [ ] 출력 스키마 (`features/cache/gaze/{split}/dia{D}_utt{U}.npz`):
-  ```python
-  {
-    "dialogue_id": int,
-    "utterance_id": int,
-    "num_frames": int,
-    "frame_points": np.ndarray,   # (N, K, 2)  K=faces per frame
-    "frame_inout":  np.ndarray,   # (N, K)
-    "frame_heatmap_stats": np.ndarray,  # (N, K, 4)  mean/std/max/entropy
-    "frame_face_bbox": np.ndarray,       # (N, K, 4)
-    "valid_mask": np.ndarray,            # (N,)
-  }
-  ```
-- [ ] **GPU 메모리 관리**: torch.no_grad + `torch.cuda.empty_cache()` per 500 clips
-- [ ] **재실행 안전성**: 이미 존재하는 .npz는 skip (`--resume`)
-
-### 완료 기준
-- train/dev/test 3-split 모두 `features/cache/gaze/` 아래 .npz 생성률 ≥ 98%
-- 누락 목록 `features/cache/gaze/missing.txt` 기록
+> **주의**: Sharingan 저장소 클론과 가중치 다운로드가 먼저 필요하다.
+> ```bash
+> git clone <sharingan-repo-url> sharingan
+> # 가중치를 sharingan_ckpt/ 에 배치
+> ```
 
 ---
 
-## 📌 Phase 3. Gaze Feature Engineering
+### Step 3 — Gaze 피처 엔지니어링 (Step 2에 포함, 별도 실행 가능)
 
-### 🎯 Goal
-프레임 단위 raw gaze → **utterance-level gaze_vec ∈ R^6**
+**무엇을 하는가**
+프레임 단위 raw gaze 출력을 발화 단위 6차원 벡터(R^6)로 집약한다.
+각 피처의 의미:
 
-### TODO
-- [ ] `features/gaze/build_features.py` 작성
-- [ ] Core features (수식 고정, 코드 주석에 정의 명시)
-  - [ ] `p_face` = (얼굴을 응시한 프레임 수) / (유효 프레임 수)
-  - [ ] `p_out` = (inout < 0.5인 프레임 수) / 유효 프레임 수
-  - [ ] `switch_rate` = (연속 프레임 간 gaze target 변경 횟수) / (유효 프레임 수 - 1)
-  - [ ] `entropy` = gaze point를 4x4 grid에 binning 후 Shannon entropy
-  - [ ] `target_count` = 서로 다른 gaze target id 수 (간단 군집화: KMeans or DBSCAN)
-  - [ ] `p_center` = gaze point가 중앙 [0.3, 0.7]^2에 위치한 비율
-- [ ] 정규화: train set 기준 z-score → `features/gaze/scaler.pkl`로 저장 후 dev/test에 재사용
-- [ ] 저장 포맷 (`features/gaze/{train,dev,test}.pkl`):
-  ```python
-  {(dialogue_id, utterance_id): np.float32 array of shape (6,)}
-  ```
-- [ ] **Edge cases**
-  - [ ] 얼굴 미검출 utterance → zero vector + `is_valid=False` 플래그
-  - [ ] gaze inference 실패 → 직전/직후 유효 프레임 linear fallback
-  - [ ] 프레임 수 < 3 → zero vector
-- [ ] **분포 sanity check**: 각 feature의 histogram을 `erc/eda_gaze.ipynb`로 확인
+| 인덱스 | 피처 | 의미 |
+|--------|------|------|
+| 0 | `p_face` | 얼굴을 응시한 프레임 비율 |
+| 1 | `p_out` | 화면 밖을 응시한 프레임 비율 |
+| 2 | `switch_rate` | 연속 프레임 간 gaze 목표 전환 빈도 |
+| 3 | `entropy` | gaze 분산도 (4×4 grid 히스토그램) |
+| 4 | `target_count` | 서로 다른 gaze 클러스터 수 |
+| 5 | `p_center` | 화면 중앙([0.3,0.7]²)을 응시한 비율 |
 
-### 완료 기준
-- `features/gaze/train.pkl` 로드 시 dict key 수 ≈ 발화 수, 값 shape = (6,)
+train 기준 z-score 정규화 → `features/gaze/scaler.pkl` 저장 후 dev/test 재사용.
+
+**어떻게 하는가**
+`bash scripts/run_phase2.sh`에 포함되어 자동 실행됨. 수동 실행:
+```bash
+python pipeline/build_features.py --split train   # 스케일러 fit + transform
+python pipeline/build_features.py --split dev
+python pipeline/build_features.py --split test
+```
+
+**완료 기준**
+- `features/gaze/train.pkl`, `dev.pkl`, `test.pkl` 생성
 - zero-vector 비율 < 5%
+- `analysis/eda_gaze.ipynb` 실행하여 분포 이상 여부 확인
 
 ---
 
-## 📌 Phase 4. TelME Data Pipeline Modification
+### Step 4 — 단위 테스트 통과 확인 (10분)
 
-### 🎯 Goal
-TelME 데이터로더가 `gaze_vec`을 batch에 포함하도록 수정
+**무엇을 하는가**
+Step 2-3이 완료된 후, 모델 코드와 데이터로더가 올바르게 동작하는지 검증한다.
+gaze_vec shape, batch 구성, grad flow 등을 자동으로 확인한다.
 
-### TODO
-- [ ] **타겟 파일**
-  - [ ] `TelME/MELD/preprocessing.py`
-  - [ ] `TelME/MELD/utils.py` (collate_fn)
-- [ ] Dataset `__getitem__`에 gaze 추가
-  ```python
-  gaze = self.gaze_cache.get((did, uid), np.zeros(6, dtype=np.float32))
-  return text, audio, video, gaze, label
-  ```
-- [ ] `collate_fn`에 `gaze_batch = torch.stack([...]).to(device)` 추가
-- [ ] **하위 호환**: `use_gaze` config flag로 on/off → baseline 재실행 가능하도록
-- [ ] 단위 테스트: `tests/test_dataloader.py`
-  - batch shape, device, dtype 확인
+**어떻게 하는가**
+```bash
+python -m pytest tests/ -v
+```
 
-### 완료 기준
-- `use_gaze=False`일 때 Phase 1 결과와 100% 동일 (결정론적)
-- `use_gaze=True`일 때 batch tuple 길이 = 5
+**완료 기준**
+```
+tests/test_dataloader.py        PASSED (gaze on/off 모두)
+tests/test_video_gaze_student.py PASSED (3 fusion type × 여러 batch size)
+```
 
 ---
 
-## 📌 Phase 5. Video + Gaze Fusion (Core)
+### Step 5 — VideoGazeStudent 학습 (약 4–8 시간)
 
-### 🎯 Goal
-Video student hidden에 gaze 표현을 주입
+**무엇을 하는가**
+Gaze가 주입된 비디오 학생 모델을 Knowledge Distillation으로 학습한다.
+기존 TimeSformer Video Student를 `VideoGazeStudent`로 교체하고,
+GazeProjector(R^6→R^768)로 gaze_vec을 비디오 hidden에 융합한다.
 
-### TODO
-- [ ] **타겟 파일**: `TelME/MELD/model.py` (또는 `models/video_gaze_student.py`로 분리)
-- [ ] **GazeProjector 구현**
-  ```python
-  class GazeProjector(nn.Module):
-      def __init__(self, in_dim=6, hidden=128, out_dim=768, p=0.1):
-          super().__init__()
-          self.mlp = nn.Sequential(
-              nn.LayerNorm(in_dim),
-              nn.Linear(in_dim, hidden),
-              nn.GELU(),
-              nn.Dropout(p),
-              nn.Linear(hidden, out_dim),
-          )
-      def forward(self, gaze):       # (B, 6)
-          return self.mlp(gaze)      # (B, 768)
-  ```
-- [ ] **Fusion 방식 (3가지 실험)**
-  - [ ] `add`: `video_hidden + λ * gaze_hidden` (λ ∈ {0.1, 0.3, 0.5, 1.0})
-  - [ ] `concat+proj`: `Linear(768+768 → 768)`
-  - [ ] `gated`: `g = σ(W[video;gaze]); out = g*video + (1-g)*gaze`
-- [ ] hidden_dim **768 고정** (TimeSformer / RoBERTa 호환)
-- [ ] `configs/phase5_video_gaze.yaml`에 fusion_type, lambda 노출
-- [ ] 단위 테스트: random input → output shape (B, 768)
+3가지 융합 방식 실험:
+| 방식 | 수식 |
+|------|------|
+| `add` | `video_h + λ × gaze_h`, λ ∈ {0.1, 0.3, 0.5, 1.0} |
+| `concat_proj` | `Linear([video_h; gaze_h] → 768)` |
+| `gated` | `g = σ(W·[video;gaze]); out = g·video + (1-g)·gaze_h` |
 
-### 완료 기준
-- `python -m pytest tests/test_video_gaze_student.py` 통과
-- forward + backward 모두 grad 흐름 확인
+**어떻게 하는가**
+```bash
+bash scripts/run_phase5.sh gated 0.3    # 권장 (기본값)
+bash scripts/run_phase5.sh add 0.5      # λ sweep용
+bash scripts/run_phase5.sh concat_proj  # 비교용
+```
 
----
+또는 직접:
+```bash
+python train/train_student_gaze.py \
+    --config configs/phase5_video_gaze.yaml \
+    --fusion-type gated \
+    --fusion-lambda 0.3
+```
 
-## 📌 Phase 6. Student Training (Distillation)
-
-### 🎯 Goal
-Video+Gaze student를 TelME distillation 체계로 학습
-
-### TODO
-- [ ] **타겟 파일**: `TelME/MELD/student.py` 확장 → `scripts/train_student_video_gaze.py`
-- [ ] 기존 video student를 `VideoGazeStudent`로 교체
-- [ ] Loss 유지:  `L = CE + α·LogitDistill(KL) + β·FeatureDistill(MSE)`
-  - α, β는 TelME 원본 값 그대로 사용
-- [ ] optimizer: AdamW, lr=1e-5 (teacher feature 손상 방지)
-- [ ] scheduler: linear warmup 10% + linear decay
-- [ ] epoch = 10, patience = 3 (dev Weighted-F1)
-- [ ] mixed precision (`torch.cuda.amp`)
-- [ ] **체크포인트**: `models/checkpoints/student_video_gaze.bin`
-- [ ] wandb 로깅 (`project=gaze_telme`, run name = phase5_fusion_type + λ)
-
-### 완료 기준
-- dev Weighted-F1이 Phase 1 video student 대비 ≥ baseline (퇴보 없음 우선)
-- 체크포인트 로드 후 재평가 수치 재현
+**완료 기준**
+- `models/checkpoints/student_video_gaze/total_student.bin` 생성
+- dev Weighted-F1 ≥ 기존 video student baseline (퇴보 없음)
 
 ---
 
-## 📌 Phase 7. Fusion Training (ASF)
+### Step 6 — ASF 융합 학습 (약 2–4 시간 × 3 seed)
 
-### 🎯 Goal
-Gaze 주입된 video student로 ASF fusion 재학습
+**무엇을 하는가**
+Step 5에서 학습된 VideoGazeStudent를 비디오 브랜치로 사용하여
+ASF(Attentive Score Fusion) 헤드를 재학습한다.
+텍스트(Teacher) + 오디오 + Gaze 주입 비디오 → 최종 감정 분류.
+3개 seed(42, 7, 2024)로 학습하여 평균±표준편차를 보고한다.
 
-### TODO
-- [ ] **타겟 파일**: `TelME/MELD/fusion.py` → `scripts/train_fusion.py`
-- [ ] video student ckpt 경로를 `student_video_gaze.bin`으로 교체
-- [ ] ASF 구조 **변경 없음** (text-leading)
-  ```python
-  fused = ASF(text_hidden, audio_hidden, video_hidden_with_gaze)
-  ```
-- [ ] hyperparam은 TelME 원본 유지
-- [ ] 최종 ckpt: `models/checkpoints/total_fusion_gaze.bin`
-- [ ] **3-seed 평균** 기록 (seed ∈ {42, 7, 2024})
+**어떻게 하는가**
+Step 5 완료 후 `run_phase5.sh`가 자동으로 이어서 실행함. 또는 직접:
+```bash
+python train/train_fusion.py --config configs/phase7_fusion.yaml
+python train/train_fusion.py --config configs/phase7_fusion.yaml --seed 7
+python train/train_fusion.py --config configs/phase7_fusion.yaml --seed 2024
+```
 
-### 완료 기준
-- `results/ours.json`에 3-seed 평균 + std 기록
-
----
-
-## 📌 Phase 8. Evaluation
-
-### TODO
-- [ ] **Metrics** (`utils/metrics.py`)
-  - [ ] Accuracy
-  - [ ] Weighted-F1 ← primary
-  - [ ] Macro-F1
-  - [ ] Class-wise F1 (7 emotions)
-- [ ] **Experiments**
-  - [ ] (A) Baseline TelME
-  - [ ] (B) + Gaze (ours)
-  - [ ] (C) Random gaze (sanity: gaze_vec ~ N(0,1))
-  - [ ] (D) Zero gaze (sanity: gaze_vec = 0)
-- [ ] **Ablation** (fix best fusion from Phase 5)
-  - [ ] only `p_face`
-  - [ ] only `p_out`
-  - [ ] only `switch_rate`
-  - [ ] only `entropy`
-  - [ ] full 6-dim
-- [ ] **Significance test**: 3-seed 결과에 대한 paired t-test
-- [ ] 결과 표 → `results/table_main.md`
-
-### 완료 기준
-- 표가 README에 포함되고, (B) vs (A)의 Weighted-F1 차이와 p-value 명시
+**완료 기준**
+- `models/checkpoints/total_fusion_gaze_seed{42,7,2024}.bin` 생성
+- `results/ours.json`에 3-seed 평균 + 표준편차 기록
 
 ---
 
-## 📌 Phase 9. Analysis
+### Step 7 — 전체 평가 실행 (1시간)
 
-### TODO
-- [ ] **Quantitative** (`erc/analysis_quant.ipynb`)
-  - [ ] confusion matrix (A) vs (B)
-  - [ ] class-wise F1 delta bar chart
-  - [ ] per-emotion gaze feature 평균 (box plot)
-- [ ] **Qualitative** (`erc/analysis_qual.ipynb`)
-  - [ ] (A)가 틀리고 (B)가 맞춘 20 samples 수집
-  - [ ] 각 샘플의 원본 클립 경로 + gaze_vec + 예측 비교 표
-  - [ ] 사례별 3줄 코멘터리
-- [ ] 에러 패턴 문서화 → `results/error_analysis.md`
+**무엇을 하는가**
+4가지 조건을 동일한 테스트 셋으로 평가하여 Gaze의 효과를 검증한다.
 
----
+| 조건 | 설명 |
+|------|------|
+| A. Baseline TelME | 원본 TelME (gaze 없음) |
+| B. + Gaze (ours) | Gaze 주입 모델 |
+| C. Random gaze | gaze_vec ~ N(0,1) (sanity check) |
+| D. Zero gaze | gaze_vec = 0 (ablation) |
 
-## 📌 Phase 10. Visualization
+**어떻게 하는가**
+```bash
+bash scripts/run_eval.sh
+```
+또는 직접:
+```bash
+python eval/eval_all.py --out results/
+```
 
-### TODO
-- [ ] 프레임 위 gaze point overlay 영상 (`erc/viz_gaze_overlay.py`)
-  - cv2.circle + cv2.arrowedLine
-- [ ] Emotion별 gaze feature 분포 plot (`erc/viz_feature_dist.py`)
-- [ ] Baseline vs Ours 비교 bar chart (`erc/viz_compare.py`)
-- [ ] 발표용 그림 → `results/figures/`
-
----
-
-## 📌 Phase 11. Optional Extension
-
-### TODO
-- [ ] Independent **4th modality** gaze branch
-  - GazeEncoder (Transformer over frame-level gaze features)
-- [ ] ASF를 4-modality로 확장 (text-leading 유지)
-- [ ] Gaze-aware **edge weighting** (graph 기반 TelME 변형 시)
-- [ ] 비교 실험: (B) 3-mod+gaze-injection vs (E) 4-mod
+**완료 기준**
+- `results/eval_all.json` 생성 (A/B/C/D 전체 지표)
+- `results/table_main.md` 생성 (논문용 비교 표)
+- B vs A의 Weighted-F1 향상 + p-value < 0.05 확인
 
 ---
 
-## ⚠️ Critical Risks & Mitigation
+### Step 8 — 분석 및 시각화 (2–4 시간)
 
-| 리스크 | 영향 | 대응 |
-|---|---|---|
-| 얼굴 검출 실패 | gaze_vec 무효 | zero vector + `is_valid` 마스크 + 학습 시 down-weight |
-| Gaze 노이즈 | 학습 불안정 | LayerNorm + feature z-score + λ sweep |
-| 화자–얼굴 mismatch | 잘못된 signal | speaker diarization 교차검증 (후속) |
-| Sharingan ↔ MELD domain gap | 일반화 저하 | 사전 검증: 100 샘플 수동 품질 평가 |
-| MELD 라벨 불균형 | Macro-F1 저하 | class-weighted CE (옵션) |
-| 재현성 | 결과 흔들림 | seed 고정 + `torch.use_deterministic_algorithms(True)` + 3-seed 평균 |
+**무엇을 하는가**
+결과의 원인을 파악하고 논문 제출용 그림을 생성한다.
+
+**어떻게 하는가**
+
+*정량 분석 (Jupyter)*
+```bash
+jupyter notebook analysis/quant.ipynb
+# - Confusion matrix 비교 (A vs B)
+# - Class-wise F1 delta 바 차트
+# - 감정별 gaze 피처 box plot
+```
+
+*정성 분석 (Jupyter)*
+```bash
+jupyter notebook analysis/qual.ipynb
+# - A 틀리고 B 맞춘 샘플 20개 수집
+# - results/error_analysis.md 저장
+```
+
+*시각화 스크립트*
+```bash
+python analysis/viz_gaze_overlay.py --dialogue 0 --utterance 3 --split dev
+python analysis/viz_feature_dist.py --split train --out results/figures/
+python analysis/viz_compare.py --out results/figures/
+```
+
+**완료 기준**
+- `results/figures/` 에 논문용 그림 일체
+- `results/error_analysis.md` 작성
 
 ---
 
-## 📊 Key Research Questions
-
-- **Q1.** Gaze 신호가 MERC 성능을 향상시키는가? (Weighted-F1 기준, p<0.05)
-- **Q2.** 어떤 감정 클래스가 가장 이득을 보는가? (class-wise F1 delta)
-- **Q3.** Gaze는 유효한 **interaction signal**인가? (random/zero gaze 대비 유의차)
-
----
-
-## ✅ Execution Order (Quick Runbook)
+## 4. 전체 실행 순서 요약
 
 ```bash
-# Phase 0
-bash scripts/setup_env.sh
+# 0. 환경 확인
+python scripts/check_env.py
 
-# Phase 1
-bash scripts/run_phase1_baseline.sh
+# 1. TelME Baseline 학습
+bash scripts/run_phase1.sh
 
-# Phase 2-3
-python preprocess/extract_clips.py   --split train
-python preprocess/sample_frames.py   --split train --fps 6 --max-frames 32
-python preprocess/detect_faces.py    --split train
-python gaze/sharingan_infer.py       --split train --resume
-python features/gaze/build_features.py --split train
-# (dev/test 동일)
+# 2-3. 전처리 + gaze 피처 생성 (train/dev/test 모두)
+bash scripts/run_phase2.sh all
 
-# Phase 5-7
-python scripts/train_student_video_gaze.py --config configs/phase5_video_gaze.yaml
-python scripts/train_fusion.py             --config configs/phase7_fusion.yaml
+# 4. 단위 테스트
+python -m pytest tests/ -v
 
-# Phase 8
-python scripts/eval_all.py --out results/
+# 5-6. VideoGazeStudent + ASF 융합 학습
+bash scripts/run_phase5.sh gated 0.3
+
+# 7. 전체 평가
+bash scripts/run_eval.sh
+
+# 8. 분석 및 시각화
+jupyter notebook analysis/quant.ipynb
+jupyter notebook analysis/qual.ipynb
+python analysis/viz_compare.py --out results/figures/
 ```
 
 ---
 
-## 🗂️ Deliverables Checklist
-- [ ] `results/baseline.json`, `results/ours.json`
-- [ ] `results/table_main.md`, `results/error_analysis.md`
-- [ ] `models/checkpoints/*.bin` (4종)
-- [ ] `features/gaze/{train,dev,test}.pkl` + `scaler.pkl`
-- [ ] `configs/*.yaml`, `scripts/*.sh`
-- [ ] `README.md` 실험 재현 절차
+## 5. 체크리스트
+
+### 실행 전 준비
+- [ ] GPU 서버 `gaze_telme` conda 환경 설치 완료
+- [ ] `sharingan/` 저장소 클론 완료
+- [ ] `sharingan_ckpt/` 가중치 배치 완료
+- [ ] `data/MELD.Raw/` 압축 해제 완료
+
+### 실행 단계
+- [ ] Step 0: `check_env.py` 전체 OK
+- [ ] Step 1: `results/baseline.json` 생성, 논문 수치와 ±0.5%p 이내
+- [ ] Step 2: gaze cache `.npz` 생성률 ≥ 98%
+- [ ] Step 3: `features/gaze/*.pkl` 생성, zero-vector < 5%
+- [ ] Step 4: `pytest tests/` 전체 PASS
+- [ ] Step 5: `student_video_gaze/total_student.bin` 생성
+- [ ] Step 6: `results/ours.json` (3-seed 평균 기록)
+- [ ] Step 7: `results/table_main.md` 생성, B > A 확인
+- [ ] Step 8: `results/figures/` 그림 일체, `error_analysis.md` 작성
+
+### 최종 산출물
+- [ ] `results/baseline.json` — TelME 원본 수치
+- [ ] `results/ours.json` — Gaze 모델 3-seed 평균
+- [ ] `results/table_main.md` — 논문 메인 비교 표
+- [ ] `results/error_analysis.md` — 오류 분석
+- [ ] `results/figures/` — 논문용 그림 일체
+- [ ] `models/checkpoints/*.bin` — 모든 체크포인트
+
+---
+
+## 6. 주요 리스크 및 대응
+
+| 리스크 | 증상 | 대응 |
+|--------|------|------|
+| Sharingan↔MELD 도메인 갭 | gaze_vec 품질 저하 | 100샘플 수동 검토 후 `analysis/viz_gaze_overlay.py`로 확인 |
+| 얼굴 미검출 발화 증가 | zero-vector > 5% | `pipeline/detect_faces.py` threshold 낮추기 (0.9 → 0.7) |
+| Gaze 주입 후 성능 퇴보 | B < A | fusion λ sweep, gaze dropout 증가, `use_gaze=False`로 baseline 재확인 |
+| 3-seed 분산 큼 | std > 0.005 | seed 추가 (2025, 123) 후 평균 재계산 |
+| OOM (GPU 메모리 부족) | CUDA OOM | batch_size 2로 축소, `torch.cuda.empty_cache()` 주기 줄이기 |

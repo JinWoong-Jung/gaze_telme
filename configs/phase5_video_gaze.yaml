@@ -1,0 +1,37 @@
+# Phase 5-6: Video + Gaze Student Training
+defaults:
+  - base
+
+gaze:
+  use_gaze: true
+  feat_dim: 6
+  projector_hidden: 128
+  projector_out: 768
+  projector_dropout: 0.1
+
+  # Fusion type: one of [add, concat_proj, gated]
+  fusion_type: gated
+
+  # For 'add' fusion: weight on gaze hidden vector
+  # Sweep: [0.1, 0.3, 0.5, 1.0]
+  fusion_lambda: 0.3
+
+training:
+  seed: 42
+  batch_size: 4
+  learning_rate: 1.0e-5
+  epochs: 10
+  patience: 3
+  warmup_ratio: 0.1
+
+  # Knowledge distillation loss weights (match TelME original)
+  alpha: 1.0   # logit distillation (KL)
+  beta: 1.0    # feature distillation (MSE)
+
+models:
+  teacher_ckpt: ${models.ckpt_dir}/teacher.bin
+  student_video_gaze_ckpt: ${models.ckpt_dir}/student_video_gaze/total_student.bin
+
+logging:
+  run_name: phase5_${gaze.fusion_type}_lambda${gaze.fusion_lambda}
+  log_dir: ${project.root}/logs/phase5

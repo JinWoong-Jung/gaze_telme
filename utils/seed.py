@@ -1,12 +1,31 @@
 import os
-import sys
+import random
+
+import numpy as np
+import torch
 
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+def set_seed(seed: int = 42, deterministic: bool = True) -> None:
+    """Seed python, numpy, and torch for reproducible experiments."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
-from erc.common.seed import set_seed
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+    if deterministic:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+        try:
+            torch.use_deterministic_algorithms(True)
+        except Exception:
+            pass
 
 
 __all__ = ["set_seed"]

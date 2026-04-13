@@ -1,0 +1,38 @@
+# Phase 7: ASF Fusion Training with Gaze-injected Video Student
+defaults:
+  - base
+
+gaze:
+  use_gaze: true
+  feat_dim: 6
+  fusion_type: gated        # must match the trained student_video_gaze ckpt
+  fusion_lambda: 0.3
+
+training:
+  seed: 42
+  batch_size: 4
+  learning_rate: 1.0e-5
+  epochs: 10
+  patience: 3
+
+  # ASF hyperparams (TelME original values)
+  asf_hidden: 768
+  asf_beta_shift: 0.1
+  asf_dropout: 0.2
+  asf_num_head: 3
+
+  # Multi-seed evaluation
+  seeds: [42, 7, 2024]
+
+models:
+  teacher_ckpt: ${models.ckpt_dir}/teacher.bin
+  student_audio_ckpt: ${models.ckpt_dir}/student_audio/total_student.bin
+  student_video_gaze_ckpt: ${models.ckpt_dir}/student_video_gaze/total_student.bin
+  fusion_gaze_ckpt: ${models.ckpt_dir}/total_fusion_gaze.bin
+
+results:
+  ours_json: ${results.dir}/ours.json
+
+logging:
+  log_dir: ${project.root}/logs/phase7
+  run_name: phase7_fusion_gaze_seed${training.seed}

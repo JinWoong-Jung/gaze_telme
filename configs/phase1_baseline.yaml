@@ -1,0 +1,22 @@
+# Phase 1: TelME Baseline Reproduction
+defaults:
+  - base
+
+training:
+  seed: 42
+  batch_size: 4
+  learning_rate: 1.0e-5
+  epochs: 10
+  patience: 3
+
+models:
+  teacher_ckpt: ${models.ckpt_dir}/teacher.bin
+  student_audio_ckpt: ${models.ckpt_dir}/student_audio/total_student.bin
+  student_video_ckpt: ${models.ckpt_dir}/student_video/total_student.bin
+  fusion_ckpt: ${models.ckpt_dir}/total_fusion.bin
+
+results:
+  baseline_json: ${results.dir}/baseline.json
+
+logging:
+  log_dir: ${project.root}/logs/phase1

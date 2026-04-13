@@ -1,0 +1,51 @@
+# Base configuration shared across all phases
+project:
+  name: gaze_telme
+  root: ${oc.env:PWD,.}   # resolved at runtime; override per-machine if needed
+
+data:
+  meld_root: ${project.root}/data/MELD.Raw
+  processed_root: ${project.root}/data/processed
+  frames_root: ${project.root}/data/processed/frames
+  clips_root: ${project.root}/data/processed/clips
+  train_csv: ${data.meld_root}/train_meld_emo.csv
+  dev_csv:   ${data.meld_root}/dev_meld_emo.csv
+  test_csv:  ${data.meld_root}/test_meld_emo.csv
+
+gaze:
+  cache_dir: ${project.root}/features/cache/gaze
+  feature_dir: ${project.root}/features/gaze
+  scaler_path: ${project.root}/features/gaze/scaler.pkl
+  feat_dim: 6
+
+models:
+  ckpt_dir: ${project.root}/models/checkpoints
+  text_model: roberta-large
+  audio_model: facebook/data2vec-audio-base-960h
+  video_model: facebook/timesformer-base-finetuned-k400
+
+training:
+  seed: 42
+  batch_size: 4
+  learning_rate: 1.0e-5
+  epochs: 10
+  max_grad_norm: 10.0
+  warmup_ratio: 0.1
+  patience: 3
+
+logging:
+  use_wandb: false
+  project: gaze_telme
+  log_dir: ${project.root}/logs
+
+results:
+  dir: ${project.root}/results
+
+emotion_labels:
+  - anger
+  - disgust
+  - fear
+  - joy
+  - neutral
+  - sadness
+  - surprise

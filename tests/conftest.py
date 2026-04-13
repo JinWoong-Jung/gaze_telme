@@ -1,0 +1,9 @@
+"""pytest configuration — adds project root to sys.path."""
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+if str(_ROOT / "TelME" / "MELD") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "TelME" / "MELD"))
