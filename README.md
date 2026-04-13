@@ -1,20 +1,20 @@
 <p align="center">
   <h1 align="center">Gaze-TelME</h1>
   <p align="center">
-    <a>정진웅</a>
+    <a>정진웅<sub>1</sub></a>
     ·
-    <a>권희진</a>
+    <a>권희진<sub>2</sub></a>
     ·
-    <a>김수현</a>
+    <a>김수현<sub>1</sub></a>
     ·
-    <a>문수라</a>
+    <a>문수라<sub>3</sub></a>
     ·
-    <a>박희성</a>
+    <a>박희성<sub>1</sub></a>
     ·
-    <a>슈멍</a>
+    <a>슈멍<sub>1</sub></a>
   </p>
   <p align="center">
-    <i>Sungkyunkwan University · AAI, DSC and CNT Departments</i><br>
+    <i>Sungkyunkwan University · <sub>1</sub> AAI, <sub>2</sub> DSC and <sub>3</sub> CNT Departments</i><br>
     <i>2026-1 SKK:AI - Social AI session</i>
   </p>
 </p>
